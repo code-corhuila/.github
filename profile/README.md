@@ -10,12 +10,11 @@ Esta organización reúne a estudiantes y profesionales de Corhuila. Aquí encon
 ## Ciclo 2023 - B
 
 ### Repositorios
-- [Repositorio](https://github.com/cde-cohuila/analisis-algoritmos-2023-b) - Análisis de Algoritmos.
-- [Repositorio](https://github.com/cde-cohuila/analisis-sistemas-2023-b) - Análisis de Sistemas.
-- [Repositorio](https://github.com/cde-cohuila/electiva-iii-2023-b) - Electiva III.
-- [Repositorio](https://github.com/cde-cohuila/logica-programacion-2023-b) - Lógica Programación.
-- [Repositorio](https://github.com/cde-cohuila/sistemas-distribuidos-2023-b) - Sistemas Distribudos.
-
+- [Repositorio de Análisis de Algoritmos](https://github.com/cde-cohuila/analisis-algoritmos-2023-b)
+- [Repositorio de Análisis de Sistemas](https://github.com/cde-cohuila/analisis-sistemas-2023-b)
+- [Repositorio de Electiva III](https://github.com/cde-cohuila/electiva-iii-2023-b)
+- [Repositorio de Lógica Programación](https://github.com/cde-cohuila/logica-programacion-2023-b)
+- [Repositorio de Sistemas Distribuidos](https://github.com/cde-cohuila/sistemas-distribuidos-2023-b)
 
 ## ¿Propósito?
 Compartir emplos y actividades de apoyo para el estudiante.
