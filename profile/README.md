@@ -7,9 +7,9 @@
 ## Descripción
 Esta organización reúne a estudiantes y profesionales de Corhuila. Aquí encontrarás proyectos, repositorios y actividades relacionadas con el aprendizaje y desarrollo de habilidades en programación, diseño de software, bases de datos y más.
 
-## Ciclo 2023 - B
+## Repositorios
 
-### Repositorios
+### Ciclo 2023 - B
 - [Repositorio de Análisis de Algoritmos](https://github.com/cde-cohuila/analisis-algoritmos-2023-b)
 - [Repositorio de Análisis de Sistemas](https://github.com/cde-cohuila/analisis-sistemas-2023-b)
 - [Repositorio de Electiva III](https://github.com/cde-cohuila/electiva-iii-2023-b)
