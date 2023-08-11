@@ -12,7 +12,7 @@ Esta organización reúne a estudiantes y profesionales de Corhuila. Aquí encon
 ### Ciclo 2023 - B
 - [Repositorio de Análisis de Algoritmos](https://github.com/code-corhuila/analisis-algoritmos-2023-b)
 - [Repositorio de Análisis de Sistemas](https://github.com/code-corhuila/analisis-sistemas-2023-b)
-- [Repositorio de Electiva III](https://github.com/code-corhuila/electiva-iii-2023-b)
+- [Repositorio de Electiva II](https://github.com/code-corhuila/electiva-ii-2023-b)
 - [Repositorio de Lógica Programación](https://github.com/code-corhuila/logica-programacion-2023-b)
 - [Repositorio de Sistemas Distribuidos](https://github.com/code-corhuila/sistemas-distribuidos-2023-b)
 
