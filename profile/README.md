@@ -16,8 +16,16 @@ Esta organización reúne a estudiantes y profesionales de Corhuila. Aquí encon
 - [Repositorio de Lógica Programación](https://github.com/code-corhuila/logica-programacion-2023-b)
 - [Repositorio de Sistemas Distribuidos](https://github.com/code-corhuila/sistemas-distribuidos-2023-b)
 
+### Ciclo 2024 - A
+- [Repositorio de Análisis de Sistemas](https://github.com/code-corhuila/analisis-algoritmos-2024-a)
+- [Repositorio de Estructura de Datos](https://github.com/code-corhuila/estructura-datos-2024-a)
+- [Repositorio de Electiva II](https://github.com/code-corhuila/electiva-ii-2024-a)
+- [Repositorio de Lógica Programación](https://github.com/code-corhuila/logica-programacion-2024-a)
+- [Repositorio de Programación Móvil](https://github.com/code-corhuila/programacion-movil-2024-a)
+- [Repositorio de Sistemas Distribuidos](https://github.com/code-corhuila/sistemas-distribuidos-2024-a)
+
 ## ¿Propósito?
-Compartir emplos y actividades de apoyo para el estudiante.
+Compartir ejemplos y actividades de apoyo para el estudiante.
 
 📧 Correo electrónico: [jesusarielgb@gmail.com](mailto:jesus.gonzalez@corhuila.edu.co)
 
