@@ -23,6 +23,7 @@ Esta organización reúne a estudiantes y profesionales de Corhuila. Aquí encon
 - [Repositorio de Lógica Programación](https://github.com/code-corhuila/logica-programacion-2024-a)
 - [Repositorio de Programación Móvil](https://github.com/code-corhuila/programacion-movil-2024-a)
 - [Repositorio de Sistemas Distribuidos](https://github.com/code-corhuila/sistemas-distribuidos-2024-a)
+- [Repositorio de Curso de Fortalecimiento](https://github.com/code-corhuila/curso-fortalecimiento-2024-a.git)
 
 ## ¿Propósito?
 Compartir ejemplos y actividades de apoyo para el estudiante.
