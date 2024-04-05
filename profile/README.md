@@ -28,7 +28,7 @@ Esta organización reúne a estudiantes y profesionales de Corhuila. Aquí encon
 ## ¿Propósito?
 Compartir ejemplos y actividades de apoyo para el estudiante.
 
-📧 Correo electrónico: [jesusarielgb@gmail.com](mailto:jesus.gonzalez@corhuila.edu.co)
+📧 Correo electrónico: [jesus.gonzalez@corhuila.edu.co](mailto:jesus.gonzalez@corhuila.edu.co)
 
 🌐 LinkedIn: [linkedin.com/in/jesusarielgonzalezbonilla](https://www.linkedin.com/in/jesusarielgonzalezbonilla)
 
