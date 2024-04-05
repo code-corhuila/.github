@@ -1,4 +1,4 @@
-# Universidad Corhuila
+# Corporación Universitaria del Huila - Corhuila
 
 ¡Bienvenido a este espacio de Código Abierto!
 
