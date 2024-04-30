@@ -24,6 +24,7 @@ Esta organización reúne a estudiantes y profesionales de Corhuila. Aquí encon
 - [Repositorio de Programación Móvil](https://github.com/code-corhuila/programacion-movil-2024-a)
 - [Repositorio de Sistemas Distribuidos](https://github.com/code-corhuila/sistemas-distribuidos-2024-a)
 - [Repositorio de Curso de Fortalecimiento](https://github.com/code-corhuila/curso-fortalecimiento-2024-a.git)
+- [Repositorio de Proyecto de Investigación - Laboratorio](https://github.com/code-corhuila/gestion-laboratorio.git)
 
 ## ¿Propósito?
 Compartir ejemplos y actividades de apoyo para el estudiante.
