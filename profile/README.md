@@ -26,6 +26,14 @@ Esta organización reúne a estudiantes y profesionales de Corhuila. Aquí encon
 - [Repositorio de Curso de Fortalecimiento](https://github.com/code-corhuila/curso-fortalecimiento-2024-a.git)
 - [Repositorio de Proyecto de Investigación - Laboratorio](https://github.com/code-corhuila/gestion-laboratorio.git)
 
+- ### Ciclo 2024 - B
+- [Repositorio de Análisis de Sistemas G1](https://github.com/code-corhuila/analisis-sistemas-2024-b-g1.git)
+- [Repositorio de Análisis de Sistemas G2](https://github.com/code-corhuila/analisis-sistemas-2024-b-g2.git)
+- [Repositorio de Estructura de Datos](https://github.com/code-corhuila/estructura-datos-2024-b.git)
+- [Repositorio de Programación Móvil](https://github.com/code-corhuila/programacion-movil-2024-b.git)
+- [Repositorio de Sistemas Distribuidos](https://github.com/code-corhuila/sistemas-distribuidos-2024-b.git)
+- [Repositorio de Base de Datos I](https://github.com/code-corhuila/base-datos-i-2024-b.git)
+
 ## ¿Propósito?
 Compartir ejemplos y actividades de apoyo para el estudiante.
 
