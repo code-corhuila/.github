@@ -1,0 +1,268 @@
+name: Organization pull request review
+
+# One central review for the whole organization.
+#
+# Sweeps every open pull request in code-corhuila, writes a review against the
+# course standard and approves it. Student work is never blocked: the human
+# control happens at the checkpoint defence, where the instructor contrasts
+# this written analysis against what the team actually did with it.
+#
+# Two profiles:
+#   *-docs  -> documentation review: completeness, consistency, traceability
+#   others  -> code review: demanding gap analysis and misoriented decisions
+#
+# This workflow NEVER checks out or executes any repository's code. It only
+# reads metadata and diffs through the API.
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+    inputs:
+      repo:
+        description: "Review only this repository (name without owner). Empty = whole org."
+        required: false
+      dry_run:
+        description: "Generate reviews but do not post them"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: org-pr-review
+  cancel-in-progress: false
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Sweep open pull requests and review them
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          INSTRUCTOR_TOKEN: ${{ secrets.INSTRUCTOR_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ONLY_REPO: ${{ inputs.repo }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          python3 - <<'PYTHON'
+          import json, os, time, urllib.request, urllib.error
+
+          ORG        = "code-corhuila"
+          MODEL      = "claude-sonnet-5"
+          MARKER     = "<!-- ai-review"
+          MAX_PRS    = 15      # pull requests handled per run
+          MAX_FILES  = 60      # files whose diff is sent
+          MAX_PATCH  = 1800    # characters of diff kept per file
+          MAX_PROMPT = 240000
+
+          GH         = os.environ["GITHUB_TOKEN"]
+          POST_TOKEN = os.environ.get("INSTRUCTOR_TOKEN") or GH
+          KEY        = os.environ.get("ANTHROPIC_API_KEY")
+          ONLY       = (os.environ.get("ONLY_REPO") or "").strip()
+          DRY        = (os.environ.get("DRY_RUN") or "").lower() == "true"
+
+          def gh(path, token=GH, method="GET", payload=None):
+              req = urllib.request.Request(
+                  f"https://api.github.com/{path}", method=method,
+                  data=json.dumps(payload).encode() if payload else None,
+                  headers={"Authorization": f"Bearer {token}",
+                           "Accept": "application/vnd.github+json",
+                           "Content-Type": "application/json",
+                           "User-Agent": "org-pr-review"})
+              with urllib.request.urlopen(req) as r:
+                  return json.loads(r.read() or "{}")
+
+          CLOSE = ("\n\n---\n\n**Approved.** This review never blocks the team: the pull "
+                   "request is approved regardless of what is raised here. These findings are "
+                   "recorded as a written trace. At the checkpoint defence you will be asked "
+                   "what you did with each one — applied it and how, or did not apply it and "
+                   "why. A reasoned decision not to follow a recommendation is acceptable; "
+                   "not having considered it is not.")
+
+          COMMON = """You are the instructor of the Distributed Systems course at CORHUILA,
+          reviewing a student team's pull request.
+
+          WRITE THE ENTIRE REVIEW IN ENGLISH. Never in Spanish, whatever the language of the
+          pull request, the code or the documentation.
+
+          COURSE STANDARD you hold the work against:
+          - Components are named `<abbr>-<domain>-<piece>` (piece = db, api, portal, app) or
+            `<abbr>-<cross-cutting>` (api-gateway, worker, workflow, infra, front). Prefixes
+            such as `ms-` or `svc-` are not the convention.
+          - Documentation repositories (`-docs`) have ONE permanent branch, `main`, fed by
+            `docs/` child branches.
+          - Code repositories have three permanent branches: `develop`, `qa`, `main`. None
+            accepts a direct commit. `develop` is fed by `feat/ fix/ chore/`, `qa` by `qa/`,
+            `main` by `release/ hotfix/`.
+          - Merging one permanent branch into another is PROHIBITED. Promotion happens by
+            re-application with `git cherry-pick -x`; the `(cherry picked from commit ...)`
+            trail is the only accepted evidence of traceability.
+          - Each domain owns its own database, in its own instance. No shared database with
+            separate schemas, no central migrations repository, and no service ever reads
+            another domain's database.
+          - The database structure lives in the `-db` repository, never in the `-api`.
+          - The shared HTTP client and session handling live in `-front`, never duplicated in
+            each `-portal` or `-app`.
+          - Pull requests are capped at 400 changed lines, must carry a description, and their
+            title must follow Conventional Commits.
+
+          STYLE: direct and technical. No filler, no emoji, no praise for its own sake. Every
+          point must name the concrete file, branch, decision or line it refers to, drawn from
+          the diff you were given. Never invent a finding you cannot support from the diff.
+          Do not add a closing note about approval: one is appended automatically."""
+
+          DOCS_PROFILE = COMMON + """
+
+          THIS IS A DOCUMENTATION REPOSITORY. Your recommendations must be about the
+          DOCUMENTATION: completeness, internal consistency, contradictions between documents,
+          traceability to user stories and decision records, naming, and pull request hygiene.
+          Implementation advice belongs in the domain repositories. When a decision record omits
+          something important, say the RECORD is missing it — do not instruct how to build it.
+
+          FORMAT:
+          - Open with "**Reviewed:**" and one paragraph on what the pull request actually
+            contains, drawn from the real diff.
+          - If the work is genuinely good, say so specifically and briefly.
+          - Then "**Recommendations on this change:**" as a numbered list of 2 to 4 items.
+          - Maximum 400 words."""
+
+          CODE_PROFILE = COMMON + """
+
+          THIS IS A CODE REPOSITORY, and the bar here is deliberately higher than for
+          documentation. Argue the gaps. Name what is misoriented and why it is misoriented,
+          not merely that it deviates from a rule. Go after:
+
+          - Architectural misdirection: domain logic leaking into adapters, framework or
+            persistence types reaching the domain, a use case that is really a controller,
+            anaemic entities with the rules living elsewhere.
+          - Boundary violations: cross-domain database access, schema living in the wrong
+            repository, one service reaching into another's internals instead of its contract.
+          - Correctness and failure modes: what happens on partial failure, on retry, on
+            concurrent execution. Missing idempotency where an operation can run twice.
+            Unhandled errors that will surface as silent data loss.
+          - Security: credentials or secrets in the diff, missing authorization checks,
+            trust placed in client-supplied values, tokens handled outside the shared layer.
+          - Data: migrations that are not reversible or not idempotent, destructive changes
+            without a stated recovery path, constraints that the domain rules require but the
+            schema does not enforce.
+          - Contracts and tests: a published contract that does not match the implementation,
+            behaviour asserted nowhere, tests that assert the implementation rather than the rule.
+          - Traceability: branch, title and promotion trail against the course standard.
+
+          Be concrete about consequence. "This is not idempotent" is weak; "a second pass over
+          the same loan applies the fine twice, and nothing in the schema prevents it" is the
+          standard. Where you are uncertain because the diff is partial, say so explicitly
+          rather than asserting.
+
+          FORMAT:
+          - Open with "**Reviewed:**" and one paragraph on what the pull request actually
+            changes.
+          - "**Findings**" — a numbered list, most serious first, 3 to 6 items. For each: what
+            is wrong, where, and what it causes. Mark each as Critical, Major or Minor.
+          - "**What was done well**" — one or two lines, only if genuinely warranted.
+          - Maximum 700 words."""
+
+          def build_context(repo, pr, files):
+              inv, diffs = [], []
+              for i, f in enumerate(files):
+                  inv.append(f"{f['filename']}  +{f['additions']}/-{f['deletions']}")
+                  if i < MAX_FILES and f.get("patch"):
+                      p = f["patch"]
+                      if len(p) > MAX_PATCH:
+                          p = p[:MAX_PATCH] + "\n... [diff truncated]"
+                      diffs.append(f"--- {f['filename']} ---\n{p}")
+              head = pr["head"]["repo"]
+              fork = "no" if head and head["full_name"] == pr["base"]["repo"]["full_name"] else "YES"
+              txt = (f"Repository: {ORG}/{repo}\n"
+                     f"Pull request #{pr['number']}: {pr['title']}\n"
+                     f"Author: {pr['user']['login']}\n"
+                     f"Branch: {pr['head']['ref']} -> {pr['base']['ref']}\n"
+                     f"From a fork: {fork}\n"
+                     f"Size: {pr['changed_files']} files, +{pr['additions']}/-{pr['deletions']}\n"
+                     f"Description:\n{(pr.get('body') or '(no description)')[:3000]}\n\n"
+                     f"FILES CHANGED:\n" + "\n".join(inv) +
+                     "\n\nDIFF:\n" + "\n\n".join(diffs))
+              return txt[:MAX_PROMPT]
+
+          def ask_model(system, context):
+              payload = {"model": MODEL, "max_tokens": 2400, "system": system,
+                         "messages": [{"role": "user", "content": context}]}
+              req = urllib.request.Request(
+                  "https://api.anthropic.com/v1/messages", method="POST",
+                  data=json.dumps(payload).encode(),
+                  headers={"x-api-key": KEY, "anthropic-version": "2023-06-01",
+                           "content-type": "application/json"})
+              for attempt in range(3):
+                  try:
+                      with urllib.request.urlopen(req) as r:
+                          d = json.loads(r.read())
+                      return "".join(b.get("text", "") for b in d["content"])
+                  except urllib.error.HTTPError as e:
+                      detail = e.read()[:300].decode("utf-8", "replace")
+                      print(f"  anthropic {e.code}: {detail}")
+                      if e.code in (429, 500, 529) and attempt < 2:
+                          time.sleep(5 * (attempt + 1)); continue
+                      return None
+                  except Exception as e:
+                      print("  anthropic call failed:", e)
+                      return None
+              return None
+
+          # ---- sweep -------------------------------------------------------
+          q = f"org:{ORG}+is:pr+is:open+draft:false"
+          if ONLY:
+              q = f"repo:{ORG}/{ONLY}+is:pr+is:open+draft:false"
+          found = gh(f"search/issues?q={q}&sort=created&order=asc&per_page=100")
+          print(f"open pull requests found: {found.get('total_count', 0)}")
+
+          if not KEY:
+              print("ANTHROPIC_API_KEY is not set — nothing to do.")
+              raise SystemExit(0)
+
+          done = 0
+          for item in found.get("items", []):
+              if done >= MAX_PRS:
+                  print("per-run limit reached; the rest will be picked up next run.")
+                  break
+              repo = item["repository_url"].rsplit("/", 1)[-1]
+              num = item["number"]
+              try:
+                  pr = gh(f"repos/{ORG}/{repo}/pulls/{num}")
+                  head_sha = pr["head"]["sha"][:12]
+                  reviews = gh(f"repos/{ORG}/{repo}/pulls/{num}/reviews?per_page=100")
+                  if any(MARKER in (r.get("body") or "") and head_sha in (r.get("body") or "")
+                         for r in reviews):
+                      continue
+                  files = gh(f"repos/{ORG}/{repo}/pulls/{num}/files?per_page=100")
+                  profile = DOCS_PROFILE if repo.endswith("-docs") else CODE_PROFILE
+                  kind = "docs" if repo.endswith("-docs") else "code"
+                  print(f"[{kind}] {repo}#{num} — {pr['changed_files']} files")
+                  body = ask_model(profile, build_context(repo, pr, files))
+                  if not body:
+                      body = ("**Reviewed:** the automated review could not be generated for "
+                              "this pull request. It is approved so the team is not blocked; "
+                              "it will be reviewed manually.")
+                  body = f"{MARKER}:{head_sha} -->\n\n{body}{CLOSE}"
+                  if DRY:
+                      print("  dry run — not posted")
+                  else:
+                      try:
+                          gh(f"repos/{ORG}/{repo}/pulls/{num}/reviews", token=POST_TOKEN,
+                             method="POST", payload={"event": "APPROVE", "body": body})
+                          print("  approved")
+                      except urllib.error.HTTPError as e:
+                          print("  approve failed:", e.code,
+                                e.read()[:200].decode("utf-8", "replace"))
+                          gh(f"repos/{ORG}/{repo}/issues/{num}/comments", method="POST",
+                             payload={"body": body})
+                          print("  posted as a comment instead")
+                  done += 1
+              except urllib.error.HTTPError as e:
+                  print(f"  {repo}#{num} skipped: {e.code}")
+              except Exception as e:
+                  print(f"  {repo}#{num} skipped: {e}")
+
+          print(f"reviewed this run: {done}")
+          PYTHON
