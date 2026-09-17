@@ -60,7 +60,7 @@ jobs:
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           # Required: the repository-scoped GITHUB_TOKEN cannot read the
           # organization's private repositories, so the sweep needs this.
-          INSTRUCTOR_TOKEN: ${{ secrets.INSTRUCTOR_TOKEN }}
+          TEACHER_TOKEN: ${{ secrets.TEACHER_TOKEN }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ONLY_REPO: ${{ inputs.repo }}
           DRY_RUN: ${{ inputs.dry_run }}
@@ -78,7 +78,7 @@ jobs:
           MAX_PATCH  = 1800    # characters of diff kept per file
           MAX_PROMPT = 240000
 
-          GH   = os.environ.get("INSTRUCTOR_TOKEN") or os.environ["GITHUB_TOKEN"]
+          GH   = os.environ.get("TEACHER_TOKEN") or os.environ["GITHUB_TOKEN"]
           ONLY = (os.environ.get("ONLY_REPO") or "").strip()
           DRY  = (os.environ.get("DRY_RUN") or "").lower() == "true"
           try:
@@ -239,8 +239,8 @@ jobs:
                   except OSError: pass
 
           # ---- sweep -------------------------------------------------------
-          if not os.environ.get("INSTRUCTOR_TOKEN"):
-              print("INSTRUCTOR_TOKEN is not set: private repositories will not be visible.")
+          if not os.environ.get("TEACHER_TOKEN"):
+              print("TEACHER_TOKEN is not set: private repositories will not be visible.")
           if not os.environ.get("CLAUDE_CODE_OAUTH_TOKEN"):
               print("CLAUDE_CODE_OAUTH_TOKEN is not set — nothing to review.")
               raise SystemExit(0)
