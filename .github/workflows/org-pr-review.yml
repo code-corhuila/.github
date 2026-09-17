@@ -55,6 +55,21 @@ jobs:
       - name: Install Claude Code
         run: npm install -g @anthropic-ai/claude-code
 
+      - name: Verify Claude Code
+        env:
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+        run: |
+          echo "--- which ---";   which claude || true
+          echo "--- version ---"; claude --version || echo "exit=$?"
+          echo "--- help (head) ---"; claude --help 2>&1 | head -40 || true
+          echo "--- minimal call ---"
+          printf 'Reply with exactly: OK' > /tmp/p.txt
+          set +e
+          claude --print --output-format text < /tmp/p.txt > /tmp/out.txt 2> /tmp/err.txt
+          echo "exit=$?"
+          echo "--- stdout ---"; cat /tmp/out.txt
+          echo "--- stderr ---"; cat /tmp/err.txt
+
       - name: Sweep open pull requests and review them
         env:
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
@@ -224,7 +239,9 @@ jobs:
                           stdin=stdin, capture_output=True, text=True,
                           timeout=600, cwd=WORKDIR)
                   if p.returncode != 0:
-                      print("  claude exit", p.returncode, (p.stderr or "")[:400])
+                      print("  claude exit", p.returncode)
+                      print("  stderr:", (p.stderr or "(empty)")[:800])
+                      print("  stdout:", (p.stdout or "(empty)")[:800])
                       return None
                   out = (p.stdout or "").strip()
                   return out or None
