@@ -11,12 +11,16 @@ name: Organization pull request review
 #   *-docs  -> documentation review: completeness, consistency, traceability
 #   others  -> code review: demanding gap analysis and misoriented decisions
 #
+# The model runs through Claude Code authenticated with the instructor's
+# subscription (CLAUDE_CODE_OAUTH_TOKEN), so no API credits are consumed.
+#
 # This workflow NEVER checks out or executes any repository's code. It only
-# reads metadata and diffs through the API.
+# reads metadata and diffs through the API, and runs the model in an empty
+# working directory.
 
 on:
   schedule:
-    - cron: "*/15 * * * *"
+    - cron: "0 * * * *"
   workflow_dispatch:
     inputs:
       repo:
@@ -26,6 +30,10 @@ on:
         description: "Generate reviews but do not post them"
         type: boolean
         default: false
+      limit:
+        description: "Maximum pull requests to review in this run"
+        required: false
+        default: "10"
 
 permissions:
   contents: read
@@ -37,42 +45,52 @@ concurrency:
 jobs:
   review:
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     steps:
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install Claude Code
+        run: npm install -g @anthropic-ai/claude-code
+
       - name: Sweep open pull requests and review them
         env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          # REQUIRED: reads the organization's private repositories and posts the
-          # review as the instructor, satisfying CODEOWNERS on main.
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          # Required: the repository-scoped GITHUB_TOKEN cannot read the
+          # organization's private repositories, so the sweep needs this.
           INSTRUCTOR_TOKEN: ${{ secrets.INSTRUCTOR_TOKEN }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ONLY_REPO: ${{ inputs.repo }}
           DRY_RUN: ${{ inputs.dry_run }}
+          PR_LIMIT: ${{ inputs.limit }}
         run: |
+          mkdir -p /tmp/review-workdir
           python3 - <<'PYTHON'
-          import json, os, time, urllib.request, urllib.error
+          import json, os, subprocess, tempfile, urllib.request, urllib.error
 
           ORG        = "code-corhuila"
           MODEL      = "claude-sonnet-5"
           MARKER     = "<!-- ai-review"
-          MAX_PRS    = 15      # pull requests handled per run
+          WORKDIR    = "/tmp/review-workdir"
           MAX_FILES  = 60      # files whose diff is sent
           MAX_PATCH  = 1800    # characters of diff kept per file
           MAX_PROMPT = 240000
 
-          # INSTRUCTOR_TOKEN is REQUIRED: the repository-scoped GITHUB_TOKEN of this
-          # repository cannot see the organization's private repositories, so the
-          # sweep would return nothing without it.
-          GH         = os.environ.get("INSTRUCTOR_TOKEN") or os.environ["GITHUB_TOKEN"]
-          POST_TOKEN = GH
-          KEY        = os.environ.get("ANTHROPIC_API_KEY")
-          ONLY       = (os.environ.get("ONLY_REPO") or "").strip()
-          DRY        = (os.environ.get("DRY_RUN") or "").lower() == "true"
+          GH   = os.environ.get("INSTRUCTOR_TOKEN") or os.environ["GITHUB_TOKEN"]
+          ONLY = (os.environ.get("ONLY_REPO") or "").strip()
+          DRY  = (os.environ.get("DRY_RUN") or "").lower() == "true"
+          try:
+              MAX_PRS = max(1, int(os.environ.get("PR_LIMIT") or 10))
+          except ValueError:
+              MAX_PRS = 10
 
-          def gh(path, token=GH, method="GET", payload=None):
+          def gh(path, method="GET", payload=None):
               req = urllib.request.Request(
                   f"https://api.github.com/{path}", method=method,
                   data=json.dumps(payload).encode() if payload else None,
-                  headers={"Authorization": f"Bearer {token}",
+                  headers={"Authorization": f"Bearer {GH}",
                            "Accept": "application/vnd.github+json",
                            "Content-Type": "application/json",
                            "User-Agent": "org-pr-review"})
@@ -87,7 +105,8 @@ jobs:
                    "not having considered it is not.")
 
           COMMON = """You are the instructor of the Distributed Systems course at CORHUILA,
-          reviewing a student team's pull request.
+          reviewing a student team's pull request. Produce ONLY the review text, with no
+          preamble, no sign-off and no commentary about the task itself.
 
           WRITE THE ENTIRE REVIEW IN ENGLISH. Never in Spanish, whatever the language of the
           pull request, the code or the documentation.
@@ -147,11 +166,11 @@ jobs:
           - Correctness and failure modes: what happens on partial failure, on retry, on
             concurrent execution. Missing idempotency where an operation can run twice.
             Unhandled errors that will surface as silent data loss.
-          - Security: credentials or secrets in the diff, missing authorization checks,
-            trust placed in client-supplied values, tokens handled outside the shared layer.
+          - Security: credentials or secrets in the diff, missing authorization checks, trust
+            placed in client-supplied values, tokens handled outside the shared layer.
           - Data: migrations that are not reversible or not idempotent, destructive changes
-            without a stated recovery path, constraints that the domain rules require but the
-            schema does not enforce.
+            without a stated recovery path, constraints the domain rules require but the schema
+            does not enforce.
           - Contracts and tests: a published contract that does not match the implementation,
             behaviour asserted nowhere, tests that assert the implementation rather than the rule.
           - Traceability: branch, title and promotion trail against the course standard.
@@ -192,48 +211,50 @@ jobs:
               return txt[:MAX_PROMPT]
 
           def ask_model(system, context):
-              payload = {"model": MODEL, "max_tokens": 2400, "system": system,
-                         "messages": [{"role": "user", "content": context}]}
-              req = urllib.request.Request(
-                  "https://api.anthropic.com/v1/messages", method="POST",
-                  data=json.dumps(payload).encode(),
-                  headers={"x-api-key": KEY, "anthropic-version": "2023-06-01",
-                           "content-type": "application/json"})
-              for attempt in range(3):
-                  try:
-                      with urllib.request.urlopen(req) as r:
-                          d = json.loads(r.read())
-                      return "".join(b.get("text", "") for b in d["content"])
-                  except urllib.error.HTTPError as e:
-                      detail = e.read()[:300].decode("utf-8", "replace")
-                      print(f"  anthropic {e.code}: {detail}")
-                      if e.code in (429, 500, 529) and attempt < 2:
-                          time.sleep(5 * (attempt + 1)); continue
+              prompt = system + "\n\n=== PULL REQUEST UNDER REVIEW ===\n\n" + context
+              with tempfile.NamedTemporaryFile("w", suffix=".txt", delete=False,
+                                               encoding="utf-8") as fh:
+                  fh.write(prompt)
+                  path = fh.name
+              try:
+                  with open(path, encoding="utf-8") as stdin:
+                      p = subprocess.run(
+                          ["claude", "--print", "--output-format", "text",
+                           "--model", MODEL],
+                          stdin=stdin, capture_output=True, text=True,
+                          timeout=600, cwd=WORKDIR)
+                  if p.returncode != 0:
+                      print("  claude exit", p.returncode, (p.stderr or "")[:400])
                       return None
-                  except Exception as e:
-                      print("  anthropic call failed:", e)
-                      return None
-              return None
+                  out = (p.stdout or "").strip()
+                  return out or None
+              except subprocess.TimeoutExpired:
+                  print("  claude timed out")
+                  return None
+              except Exception as e:
+                  print("  claude invocation failed:", e)
+                  return None
+              finally:
+                  try: os.unlink(path)
+                  except OSError: pass
 
           # ---- sweep -------------------------------------------------------
+          if not os.environ.get("INSTRUCTOR_TOKEN"):
+              print("INSTRUCTOR_TOKEN is not set: private repositories will not be visible.")
+          if not os.environ.get("CLAUDE_CODE_OAUTH_TOKEN"):
+              print("CLAUDE_CODE_OAUTH_TOKEN is not set — nothing to review.")
+              raise SystemExit(0)
+
           q = f"org:{ORG}+is:pr+is:open+draft:false"
           if ONLY:
               q = f"repo:{ORG}/{ONLY}+is:pr+is:open+draft:false"
           found = gh(f"search/issues?q={q}&sort=created&order=asc&per_page=100")
           print(f"open pull requests found: {found.get('total_count', 0)}")
 
-          if not os.environ.get("INSTRUCTOR_TOKEN"):
-              print("INSTRUCTOR_TOKEN is not set. The repository-scoped GITHUB_TOKEN cannot "
-                    "read the organization's private repositories, so this sweep can only "
-                    "see public ones. Add the secret to enable the full sweep.")
-          if not KEY:
-              print("ANTHROPIC_API_KEY is not set — nothing to review.")
-              raise SystemExit(0)
-
           done = 0
           for item in found.get("items", []):
               if done >= MAX_PRS:
-                  print("per-run limit reached; the rest will be picked up next run.")
+                  print("per-run limit reached; the rest are picked up next run.")
                   break
               repo = item["repository_url"].rsplit("/", 1)[-1]
               num = item["number"]
@@ -245,21 +266,22 @@ jobs:
                          for r in reviews):
                       continue
                   files = gh(f"repos/{ORG}/{repo}/pulls/{num}/files?per_page=100")
-                  profile = DOCS_PROFILE if repo.endswith("-docs") else CODE_PROFILE
-                  kind = "docs" if repo.endswith("-docs") else "code"
-                  print(f"[{kind}] {repo}#{num} — {pr['changed_files']} files")
-                  body = ask_model(profile, build_context(repo, pr, files))
+                  is_docs = repo.endswith("-docs")
+                  print(f"[{'docs' if is_docs else 'code'}] {repo}#{num} — "
+                        f"{pr['changed_files']} files")
+                  body = ask_model(DOCS_PROFILE if is_docs else CODE_PROFILE,
+                                   build_context(repo, pr, files))
                   if not body:
                       body = ("**Reviewed:** the automated review could not be generated for "
                               "this pull request. It is approved so the team is not blocked; "
                               "it will be reviewed manually.")
                   body = f"{MARKER}:{head_sha} -->\n\n{body}{CLOSE}"
                   if DRY:
-                      print("  dry run — not posted")
+                      print("  dry run — not posted\n" + body[:600])
                   else:
                       try:
-                          gh(f"repos/{ORG}/{repo}/pulls/{num}/reviews", token=POST_TOKEN,
-                             method="POST", payload={"event": "APPROVE", "body": body})
+                          gh(f"repos/{ORG}/{repo}/pulls/{num}/reviews", method="POST",
+                             payload={"event": "APPROVE", "body": body})
                           print("  approved")
                       except urllib.error.HTTPError as e:
                           print("  approve failed:", e.code,
