@@ -41,6 +41,8 @@ jobs:
       - name: Sweep open pull requests and review them
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          # REQUIRED: reads the organization's private repositories and posts the
+          # review as the instructor, satisfying CODEOWNERS on main.
           INSTRUCTOR_TOKEN: ${{ secrets.INSTRUCTOR_TOKEN }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ONLY_REPO: ${{ inputs.repo }}
@@ -57,8 +59,11 @@ jobs:
           MAX_PATCH  = 1800    # characters of diff kept per file
           MAX_PROMPT = 240000
 
-          GH         = os.environ["GITHUB_TOKEN"]
-          POST_TOKEN = os.environ.get("INSTRUCTOR_TOKEN") or GH
+          # INSTRUCTOR_TOKEN is REQUIRED: the repository-scoped GITHUB_TOKEN of this
+          # repository cannot see the organization's private repositories, so the
+          # sweep would return nothing without it.
+          GH         = os.environ.get("INSTRUCTOR_TOKEN") or os.environ["GITHUB_TOKEN"]
+          POST_TOKEN = GH
           KEY        = os.environ.get("ANTHROPIC_API_KEY")
           ONLY       = (os.environ.get("ONLY_REPO") or "").strip()
           DRY        = (os.environ.get("DRY_RUN") or "").lower() == "true"
@@ -217,8 +222,12 @@ jobs:
           found = gh(f"search/issues?q={q}&sort=created&order=asc&per_page=100")
           print(f"open pull requests found: {found.get('total_count', 0)}")
 
+          if not os.environ.get("INSTRUCTOR_TOKEN"):
+              print("INSTRUCTOR_TOKEN is not set. The repository-scoped GITHUB_TOKEN cannot "
+                    "read the organization's private repositories, so this sweep can only "
+                    "see public ones. Add the secret to enable the full sweep.")
           if not KEY:
-              print("ANTHROPIC_API_KEY is not set — nothing to do.")
+              print("ANTHROPIC_API_KEY is not set — nothing to review.")
               raise SystemExit(0)
 
           done = 0
