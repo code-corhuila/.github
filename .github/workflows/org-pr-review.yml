@@ -59,6 +59,10 @@ jobs:
         env:
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
         run: |
+          # A token pasted from a wrapped terminal line can carry stray whitespace,
+          # which makes the API reject it as invalid. Tokens never contain
+          # whitespace, so removing it is safe and makes the secret paste-proof.
+          export CLAUDE_CODE_OAUTH_TOKEN="$(printf '%s' "$CLAUDE_CODE_OAUTH_TOKEN" | tr -d '[:space:]')"
           echo "--- token shape (no value printed) ---"
           T="$CLAUDE_CODE_OAUTH_TOKEN"
           echo "length: ${#T}"
@@ -94,6 +98,10 @@ jobs:
           DRY_RUN: ${{ inputs.dry_run }}
           PR_LIMIT: ${{ inputs.limit }}
         run: |
+          # A token pasted from a wrapped terminal line can carry stray whitespace,
+          # which makes the API reject it as invalid. Tokens never contain
+          # whitespace, so removing it is safe and makes the secret paste-proof.
+          export CLAUDE_CODE_OAUTH_TOKEN="$(printf '%s' "$CLAUDE_CODE_OAUTH_TOKEN" | tr -d '[:space:]')"
           mkdir -p /tmp/review-workdir
           python3 - <<'PYTHON'
           import json, os, subprocess, tempfile, urllib.request, urllib.error
