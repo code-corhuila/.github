@@ -315,7 +315,7 @@ jobs:
                               "it will be reviewed manually.")
                   body = f"{MARKER}:{head_sha} -->\n\n{body}{CLOSE}"
                   if DRY:
-                      print("  dry run — not posted\n" + body[:600])
+                      print("  dry run — not posted\n" + body)
                   else:
                       try:
                           gh(f"repos/{ORG}/{repo}/pulls/{num}/reviews", method="POST",
