@@ -59,6 +59,19 @@ jobs:
         env:
           CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
         run: |
+          echo "--- token shape (no value printed) ---"
+          T="$CLAUDE_CODE_OAUTH_TOKEN"
+          echo "length: ${#T}"
+          case "$T" in
+            sk-ant-oat*) echo "prefix: sk-ant-oat (expected)";;
+            sk-ant-api*) echo "prefix: sk-ant-api  <-- this is an API key, not a setup-token";;
+            "")          echo "prefix: EMPTY";;
+            *)           echo "prefix: unexpected";;
+          esac
+          case "$T" in
+            *" "*)  echo "contains a space";;
+            *)      echo "no spaces";;
+          esac
           echo "--- which ---";   which claude || true
           echo "--- version ---"; claude --version || echo "exit=$?"
           echo "--- help (head) ---"; claude --help 2>&1 | head -40 || true
