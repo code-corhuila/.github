@@ -108,6 +108,10 @@ jobs:
                    "why. A reasoned decision not to follow a recommendation is acceptable; "
                    "not having considered it is not.")
 
+          CLOSE_SELF = ("\n\n---\n\n*Filed as a comment, not an approval: GitHub does not "
+                        "allow approving one's own pull request. The findings above stand "
+                        "exactly as they would in any other review.*")
+
           COMMON = """You are the instructor of the Distributed Systems course at CORHUILA,
           reviewing a student team's pull request. Produce ONLY the review text, with no
           preamble, no sign-off and no commentary about the task itself.
@@ -244,6 +248,25 @@ jobs:
                   try: os.unlink(path)
                   except OSError: pass
 
+          # GitHub's own wording when it drops an approval by itself. Anything
+          # else means a person dismissed the review on purpose.
+          AUTO_DISMISS = ("merge-base changed", "stale", "dismissed automatically")
+
+          def auto_dismissed(repo, num):
+              """True when GitHub, not a person, dropped the approval.
+
+              A dismissal the instructor performed deliberately has to stand:
+              re-approving it would quietly undo a human decision."""
+              try:
+                  tl = gh(f"repos/{ORG}/{repo}/issues/{num}/timeline?per_page=100")
+              except Exception:
+                  return False
+              msgs = [(e.get("dismissed_review") or {}).get("dismissal_message") or ""
+                      for e in tl if e.get("event") == "review_dismissed"]
+              if not msgs:
+                  return False
+              return any(k in msgs[-1].lower() for k in AUTO_DISMISS)
+
           # ---- sweep -------------------------------------------------------
           if not os.environ.get("TEACHER_TOKEN"):
               print("TEACHER_TOKEN is not set: private repositories will not be visible.")
@@ -254,11 +277,35 @@ jobs:
           q = f"org:{ORG}+is:pr+is:open+draft:false"
           if ONLY:
               q = f"repo:{ORG}/{ONLY}+is:pr+is:open+draft:false"
-          found = gh(f"search/issues?q={q}&sort=created&order=asc&per_page=100")
-          print(f"open pull requests found: {found.get('total_count', 0)}")
+          # The search endpoint caps a page at 100 results. Once the org holds
+          # more open pull requests than that, a single page silently hides the
+          # newest ones from every run, forever. Walk the pages.
+          items, page = [], 1
+          while True:
+              found = gh(f"search/issues?q={q}&sort=created&order=asc"
+                         f"&per_page=100&page={page}")
+              batch = found.get("items", [])
+              if page == 1:
+                  print(f"open pull requests found: {found.get('total_count', 0)}")
+              items.extend(batch)
+              # The search API refuses to page past 1000 results.
+              if len(batch) < 100 or len(items) >= 1000:
+                  break
+              page += 1
+          print(f"pull requests swept: {len(items)}")
+
+          # GitHub rejects approving your own pull request, so the instructor's
+          # own ones are filed as a comment review instead.
+          try:
+              SELF = (gh("user") or {}).get("login") or ""
+          except Exception:
+              SELF = ""
+          if not SELF:
+              print("the bot's own account could not be resolved; reinstatement is "
+                    "disabled for this run.")
 
           done = 0
-          for item in found.get("items", []):
+          for item in items:
               if done >= MAX_PRS:
                   print("per-run limit reached; the rest are picked up next run.")
                   break
@@ -268,27 +315,67 @@ jobs:
                   pr = gh(f"repos/{ORG}/{repo}/pulls/{num}")
                   head_sha = pr["head"]["sha"][:12]
                   reviews = gh(f"repos/{ORG}/{repo}/pulls/{num}/reviews?per_page=100")
-                  if any(MARKER in (r.get("body") or "") and head_sha in (r.get("body") or "")
-                         for r in reviews):
+                  marked = [r for r in reviews
+                            if MARKER in (r.get("body") or "")
+                            and head_sha in (r.get("body") or "")]
+                  # Only this account's own reviews are trusted. Anyone with write
+                  # access on the repository could otherwise paste the marker into a
+                  # review of their own and have that text reinstated as an approval
+                  # under the instructor's name.
+                  prior = [r for r in marked
+                           if ((r.get("user") or {}).get("login") or "").lower()
+                           == SELF.lower()] if SELF else marked
+                  # A review that still counts means this head is handled. A
+                  # DISMISSED one counts for nothing: GitHub wipes the approval on
+                  # every open pull request whenever the base branch moves, and
+                  # keying the skip on the head alone left those blocked forever —
+                  # the head does not change when a review is dismissed.
+                  if any((r.get("state") or "").upper() != "DISMISSED" for r in prior):
                       continue
-                  files = gh(f"repos/{ORG}/{repo}/pulls/{num}/files?per_page=100")
+                  if not SELF and marked:
+                      # The bot's own account could not be resolved, so its reviews
+                      # cannot be told apart from anyone else's. Stay with the old,
+                      # conservative skip rather than reinstating text that may not
+                      # be ours.
+                      continue
+                  if prior and not auto_dismissed(repo, num):
+                      print(f"  {repo}#{num} — dismissed by a person; left as it is.")
+                      continue
+                  mine = bool(SELF) and pr["user"]["login"].lower() == SELF.lower()
                   is_docs = repo.endswith("-docs")
-                  print(f"[{'docs' if is_docs else 'code'}] {repo}#{num} — "
-                        f"{pr['changed_files']} files")
-                  body = ask_model(DOCS_PROFILE if is_docs else CODE_PROFILE,
-                                   build_context(repo, pr, files))
-                  if not body:
-                      body = ("**Reviewed:** the automated review could not be generated for "
-                              "this pull request. It is approved so the team is not blocked; "
-                              "it will be reviewed manually.")
-                  body = f"{MARKER}:{head_sha} -->\n\n{body}{CLOSE}"
+                  if prior:
+                      # Same head: the team's work is byte for byte what was already
+                      # reviewed, so the text is reinstated rather than regenerated.
+                      # Re-running the model here would spend subscription quota on
+                      # a diff that has not changed.
+                      body = prior[-1]["body"]
+                      print(f"[reinstate] {repo}#{num} — approval was auto-dismissed")
+                  else:
+                      files = gh(f"repos/{ORG}/{repo}/pulls/{num}/files?per_page=100")
+                      print(f"[{'docs' if is_docs else 'code'}] {repo}#{num} — "
+                            f"{pr['changed_files']} files")
+                      body = ask_model(DOCS_PROFILE if is_docs else CODE_PROFILE,
+                                       build_context(repo, pr, files))
+                      if not body:
+                          body = ("**Reviewed:** the automated review could not be generated "
+                                  "for this pull request. It is approved so the team is not "
+                                  "blocked; it will be reviewed manually.")
+                      body = f"{MARKER}:{head_sha} -->\n\n{body}" + (CLOSE_SELF if mine
+                                                                      else CLOSE)
                   if DRY:
                       print("  dry run — not posted\n" + body)
                   else:
                       try:
+                          # A COMMENT review still lands in the reviews list, so the
+                          # marker is found next run. The old fallback wrote an issue
+                          # comment, which the skip never sees: the instructor's own
+                          # pull request was re-reviewed every hour, forever, and ate
+                          # the run's budget.
+                          event = "COMMENT" if mine else "APPROVE"
                           gh(f"repos/{ORG}/{repo}/pulls/{num}/reviews", method="POST",
-                             payload={"event": "APPROVE", "body": body})
-                          print("  approved")
+                             payload={"event": event, "body": body})
+                          print("  commented (own pull request)" if mine
+                                else "  approved")
                       except urllib.error.HTTPError as e:
                           print("  approve failed:", e.code,
                                 e.read()[:200].decode("utf-8", "replace"))
