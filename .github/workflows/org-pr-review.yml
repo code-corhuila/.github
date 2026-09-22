@@ -108,6 +108,12 @@ jobs:
                    "why. A reasoned decision not to follow a recommendation is acceptable; "
                    "not having considered it is not.")
 
+          CLOSE_BEHIND = ("\n\n---\n\n**This branch has fallen behind `{base}`, so this "
+                          "approval will not hold.** GitHub dismisses the approval of any "
+                          "pull request whose branch is behind its base, within seconds of "
+                          "it being given. Bring the branch up to date with `{base}` and "
+                          "the approval stands on the next sweep. Nothing else is required.")
+
           CLOSE_SELF = ("\n\n---\n\n*Filed as a comment, not an approval: GitHub does not "
                         "allow approving one's own pull request. The findings above stand "
                         "exactly as they would in any other review.*")
@@ -252,6 +258,21 @@ jobs:
           # else means a person dismissed the review on purpose.
           AUTO_DISMISS = ("merge-base changed", "stale", "dismissed automatically")
 
+          def behind_base(repo, pr):
+              """How many commits the head branch is behind its base.
+
+              An approval cannot survive on a branch that has fallen behind:
+              GitHub recomputes the test merge, finds the merge base recorded
+              with the review stale, and dismisses it within about thirty
+              seconds. Measured so the sweep does not start an hourly
+              approve-and-dismiss loop against a branch that cannot hold one."""
+              try:
+                  c = gh(f"repos/{ORG}/{repo}/compare/"
+                         f"{pr['base']['ref']}...{pr['head']['label']}")
+                  return int(c.get("behind_by") or 0)
+              except Exception:
+                  return 0
+
           def auto_dismissed(repo, num):
               """True when GitHub, not a person, dropped the approval.
 
@@ -343,7 +364,16 @@ jobs:
                       continue
                   mine = bool(SELF) and pr["user"]["login"].lower() == SELF.lower()
                   is_docs = repo.endswith("-docs")
+                  behind = behind_base(repo, pr)
                   if prior:
+                      if behind:
+                          # Reinstating here would only be dismissed again within
+                          # seconds, every hour, forever. The review already on the
+                          # pull request says what the team has to do.
+                          print(f"  {repo}#{num} — {behind} behind "
+                                f"{pr['base']['ref']}; an approval cannot hold until "
+                                f"the branch is updated. Left as it is.")
+                          continue
                       # Same head: the team's work is byte for byte what was already
                       # reviewed, so the text is reinstated rather than regenerated.
                       # Re-running the model here would spend subscription quota on
@@ -360,8 +390,10 @@ jobs:
                           body = ("**Reviewed:** the automated review could not be generated "
                                   "for this pull request. It is approved so the team is not "
                                   "blocked; it will be reviewed manually.")
-                      body = f"{MARKER}:{head_sha} -->\n\n{body}" + (CLOSE_SELF if mine
-                                                                      else CLOSE)
+                      body = (f"{MARKER}:{head_sha} -->\n\n{body}"
+                              + (CLOSE_SELF if mine else CLOSE)
+                              + (CLOSE_BEHIND.format(base=pr["base"]["ref"])
+                                 if behind else ""))
                   if DRY:
                       print("  dry run — not posted\n" + body)
                   else:
