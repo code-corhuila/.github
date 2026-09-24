@@ -72,7 +72,13 @@ jobs:
           export CLAUDE_CODE_OAUTH_TOKEN="$(printf '%s' "$CLAUDE_CODE_OAUTH_TOKEN" | tr -d '[:space:]')"
           mkdir -p /tmp/review-workdir
           python3 - <<'PYTHON'
-          import json, os, subprocess, tempfile, urllib.request, urllib.error
+          import json, os, re, subprocess, tempfile, urllib.request, urllib.error
+
+          # Course repositories (e.g. sistemas-distribuidos-2026-b-g1) are the
+          # instructor's; students submit in their forks. A pull request into one
+          # is a mistake, and approving it as the instructor lent it a legitimacy
+          # that led to an unauthorised push to main (2026-09-23). Never review them.
+          COURSE_REPO = re.compile(r"-20\d{2}-[ab](-g\d+)?$")
 
           ORG        = "code-corhuila"
           MODEL      = "claude-sonnet-5"
@@ -332,6 +338,9 @@ jobs:
                   break
               repo = item["repository_url"].rsplit("/", 1)[-1]
               num = item["number"]
+              if COURSE_REPO.search(repo) or repo == ".github":
+                  print(f"  {repo}#{num} skipped: course repository")
+                  continue
               try:
                   pr = gh(f"repos/{ORG}/{repo}/pulls/{num}")
                   head_sha = pr["head"]["sha"][:12]
