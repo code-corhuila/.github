@@ -1,0 +1,60 @@
+name: Actions guard
+
+# Enforces ACTIONS-POLICY.md across the organization.
+#
+# Private repositories share 3,000 Actions minutes a month under a $0 budget:
+# when they run out, no job starts in any private repository until the next
+# month. This guard disables forbidden triggers (`schedule`, `workflow_run`),
+# cuts off a repository that burns more than REPO_DAILY_LIMIT minutes in a day,
+# and keeps a tracking issue here with the month's consumption, mentioning the
+# instructor at 50 %, 75 % and 90 % of the quota.
+#
+# This repository is public, so the guard's own runs do not spend the quota.
+# It never checks out or runs another repository's code: it reads workflow
+# files and billing data through the API.
+#
+# ACTIONS_GUARD_TOKEN is a fine-grained PAT (owner code-corhuila, All
+# repositories) with Actions: Read and write (to disable workflows), Contents:
+# Read-only (to read workflow files), Issues: Read and write, Metadata:
+# Read-only and, at organization level, Administration: Read-only (billing).
+
+on:
+  schedule:
+    - cron: "20 * * * *"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Report only: do not disable workflows or write issues"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: actions-guard
+  cancel-in-progress: false
+
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install the YAML parser
+        run: python3 -m pip install --quiet pyyaml==6.0.2
+
+      - name: Enforce the Actions policy
+        env:
+          GUARD_TOKEN: ${{ secrets.ACTIONS_GUARD_TOKEN }}
+          DRY_RUN: ${{ inputs.dry_run }}
+          QUOTA_MINUTES: "3000"
+          REPO_DAILY_LIMIT: "60"
+        run: |
+          # A token pasted from a wrapped terminal line can carry stray whitespace.
+          export GUARD_TOKEN="$(printf '%s' "$GUARD_TOKEN" | tr -d '[:space:]')"
+          if [ -z "$GUARD_TOKEN" ]; then
+            echo "::error::Missing the ACTIONS_GUARD_TOKEN secret"; exit 1
+          fi
+          python3 .github/scripts/actions_guard.py
