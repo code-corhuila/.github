@@ -146,7 +146,12 @@ def check_workflow(text):
             warnings.append(("R3", f"job `{name}` has no `timeout-minutes` (default is 360)"))
         elif isinstance(t, (int, float)) and t > MAX_TIMEOUT:
             warnings.append(("R3", f"job `{name}` allows {t} minutes (maximum {MAX_TIMEOUT})"))
-    if "pull_request" in trig and "concurrency" not in doc:
+    pr = trig.get("pull_request", "absent")
+    pr_types = pr.get("types") if isinstance(pr, dict) else None
+    # Only runs fired by new commits (the default types) pile up; `types: [closed]`
+    # and similar run once per pull request.
+    pr_ci = pr != "absent" and (not pr_types or "synchronize" in pr_types)
+    if pr_ci and "concurrency" not in doc:
         warnings.append(("R4", "pull-request CI without `concurrency` (superseded runs keep running)"))
     return blocking, warnings
 
