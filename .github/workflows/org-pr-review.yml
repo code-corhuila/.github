@@ -510,9 +510,17 @@ jobs:
                   is_docs = repo.endswith("-docs")
                   behind = behind_base(repo, pr)
                   if behind is None:
-                      print(f"  {repo}#{num} — cannot tell whether the branch is "
-                            f"behind {pr['base']['ref']} (TEACHER_TOKEN needs "
-                            f"Contents: Read-only); not approved this run.")
+                      head_owner = ((pr["head"].get("repo") or {}).get("owner") or {}).get("login", "")
+                      if head_owner.lower() != ORG.lower():
+                          # The organization-scoped token cannot read a fork in a
+                          # personal account, so the comparison is unknowable.
+                          print(f"  {repo}#{num} — not approved: opened from the fork "
+                                f"{head_owner or '(deleted)'}/{repo}; team members open "
+                                f"pull requests from a branch of {ORG}/{repo}.")
+                      else:
+                          print(f"  {repo}#{num} — cannot tell whether the branch is "
+                                f"behind {pr['base']['ref']} (TEACHER_TOKEN needs "
+                                f"Contents: Read-only); not approved this run.")
                       continue
                   if prior:
                       if behind:
