@@ -156,8 +156,9 @@ jobs:
 
           COURSE STANDARD you hold the work against:
           - Components are named `<abbr>-<domain>-<piece>` (piece = db, api, portal, app) or
-            `<abbr>-<cross-cutting>` (api-gateway, worker, workflow, infra, front). Prefixes
-            such as `ms-` or `svc-` are not the convention.
+            `<abbr>-<cross-cutting>` (api-gateway, worker, workflow, front, security, and the
+            infrastructure per engine: infra-postgres, infra-mongo; older projects may still
+            have a single `infra`). Prefixes such as `ms-` or `svc-` are not the convention.
           - Documentation repositories (`-docs`) have ONE permanent branch, `main`, fed by
             `docs/` child branches.
           - Code repositories have three permanent branches: `develop`, `qa`, `main`. None
@@ -166,9 +167,19 @@ jobs:
           - Merging one permanent branch into another is PROHIBITED. Promotion happens by
             re-application with `git cherry-pick -x`; the `(cherry picked from commit ...)`
             trail is the only accepted evidence of traceability.
-          - Each domain owns its own database, in its own instance. No shared database with
-            separate schemas, no central migrations repository, and no service ever reads
-            another domain's database.
+          - Data (Annex J, which SUPERSEDES numeral 7 of the standard): ONE database instance
+            PER ENGINE, defined in `<abbr>-infra-postgres` and `<abbr>-infra-mongo` (container,
+            volume, one env file per environment: dev, qa, main). Both engines are mandatory.
+            Each domain's `-db` feeds that shared instance with its DDL/DML/DCL/TCL inside its
+            OWN schema (PostgreSQL) or its OWN logical database (MongoDB); `public` with
+            domain-prefixed tables is accepted. A shared instance per engine is the RULE, never
+            a violation; a `-db` that defines its own database container or volume is the
+            deviation. Each `-db` keeps its own migration tracking table. No central migrations
+            repository. A service WRITES only to its own domain; read-only queries to another
+            domain are accepted when granted by the owning `-db` and registered as technical
+            debt in an ADR; events are the ideal. No foreign keys and no transactions across
+            domains.
+          - Backend services use at least two languages; portals use React and Angular.
           - The database structure lives in the `-db` repository, never in the `-api`.
           - The shared HTTP client and session handling live in `-front`, never duplicated in
             each `-portal` or `-app`.
