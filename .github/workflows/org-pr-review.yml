@@ -162,14 +162,15 @@ jobs:
           - Documentation repositories (`-docs`) have ONE permanent branch, `main`, fed by
             `docs/` child branches.
           - Code repositories have three permanent branches: `develop`, `qa`, `main`. None
-            accepts a direct commit. Per user story (HU): `develop` is fed by `hu-<id>-dev`
-            (older names `feat/ fix/ chore/` are also accepted); `qa` by `hu-<id>-qa`, which
-            re-applies the story's `develop` commits with `git cherry-pick -x`; `main` by
-            `release.<major>.x.x` (for example `release.2.0.0`), cut from `main`, which is fed by one
-            `hu-<id>-release` branch per story (cherry-pick -x of the `qa` commits), and each
-            release is tagged `v<major>.<minor>.<patch>` once merged. The prefix `qa/` does
-            NOT exist: Git cannot hold a branch `qa` and a branch `qa/x` at once, so NEVER
-            report `qa/` or `release/` as missing or wrong.
+            accepts a direct commit. `develop` is fed by `feat/ fix/ chore/` (the standard) or
+            by `hu-<id>-dev`. `qa` is fed by a child branch that re-applies the story's
+            commits with `git cherry-pick -x`; the prefix `qa/` is IMPOSSIBLE in Git (it cannot
+            coexist with the branch `qa`), so accept `hu-<id>-qa`, `qa-...`, `promotion/...`
+            and `promo/...` and NEVER report `qa/` as missing. `main` is fed by a release
+            branch, `release/<major>.<minor>.<patch>` (the standard) or `release.<major>.x.x`,
+            which is itself fed by `hu-<id>-release` branches (cherry-pick -x of the `qa`
+            commits); the merged release is tagged `v<major>.<minor>.<patch>`. Report a branch
+            name only when it gives NO way to tell which story or release it carries.
           - Merging one permanent branch into another is PROHIBITED. Promotion happens by
             re-application with `git cherry-pick -x`; the `(cherry picked from commit ...)`
             trail is the only accepted evidence of traceability.
