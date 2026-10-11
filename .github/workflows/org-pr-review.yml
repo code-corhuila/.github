@@ -162,8 +162,14 @@ jobs:
           - Documentation repositories (`-docs`) have ONE permanent branch, `main`, fed by
             `docs/` child branches.
           - Code repositories have three permanent branches: `develop`, `qa`, `main`. None
-            accepts a direct commit. `develop` is fed by `feat/ fix/ chore/`, `qa` by `qa/`,
-            `main` by `release/ hotfix/`.
+            accepts a direct commit. Per user story (HU): `develop` is fed by `hu-<id>-dev`
+            (older names `feat/ fix/ chore/` are also accepted); `qa` by `hu-<id>-qa`, which
+            re-applies the story's `develop` commits with `git cherry-pick -x`; `main` by
+            `release.<major>.x.x` (for example `release.2.0.0`), cut from `main`, which is fed by one
+            `hu-<id>-release` branch per story (cherry-pick -x of the `qa` commits), and each
+            release is tagged `v<major>.<minor>.<patch>` once merged. The prefix `qa/` does
+            NOT exist: Git cannot hold a branch `qa` and a branch `qa/x` at once, so NEVER
+            report `qa/` or `release/` as missing or wrong.
           - Merging one permanent branch into another is PROHIBITED. Promotion happens by
             re-application with `git cherry-pick -x`; the `(cherry picked from commit ...)`
             trail is the only accepted evidence of traceability.
